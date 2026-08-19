@@ -1,218 +1,23 @@
-// import express, { NextFunction, Request, Response } from "express";
-// import { allowedNodeEnvironmentFlags } from "node:process";
-// import { config } from "./config.js";
-// const app = express();
-// const port = 8080; 
-
-// //1. First Middleware to log the non success status code
-// function middlewareLogResponses(req:Request,res:Response,next:NextFunction){
-//     res.on("finish",()=>{
-//         if(res.statusCode != 200){
-//             console.log(`[NON-OK] ${req.method} ${req.url} - Status: ${res.statusCode}`);
-//         }
-//     });
-//     next()
-// }
-
-// // 2. The Middleware: Increments hits and passes control to the next handler
-// function middlewareMetricsInc(req: Request, res: Response, next: NextFunction) {
-//   config.fileserverHits++;
-//   next();
-// }
-// // app.use(express.static("."));
-
-// app.use("/app", middlewareMetricsInc);
-// app.use("/app", express.static("./src/app"));
-// app.use(middlewareLogResponses);
-// app.use(express.json())
-// // Explicitly type req and res using the imported types
-// const handlerReadiness = (req: Request, res: Response) => {
-//     res.set("Content-Type", "text/plain");
-//     res.status(200).send("OK");
-// };
-// // app.use("/app", middlewareMetricsInc); this wont work cause if the request on 
-// // the route /app get succefully executed with code 200 the request wont be passed down to next middleware attached to /app route
-// app.get("/api/healthz", handlerReadiness);
-
-// // 3. Metrics Handler: Returns "Hits: x" as plain text
-// // app.get("/api/metrics", (req: Request, res: Response) => {
-// //   res.set("Content-Type", "text/plain");
-// //   res.status(200).send(`Hits: ${config.fileserverHits}`);
-// // });
-
-// // 4. Reset Handler: Resets the counter back to 0
-// // app.get("/api/reset", (req: Request, res: Response) => {
-// //   config.fileserverHits = 0;
-// //   res.set("Content-Type", "text/plain");
-// //   res.status(200).send("Hits reset to 0");
-// // });
-
-// //Namespace -> admin 
-
-// app.get("/admin/metrics", (req: Request, res: Response) => {
-//   res.set("Content-Type", "text/html");
-//   res.status(200).send(`<html>
-//   <body>
-//     <h1>Welcome, Chirpy Admin</h1>
-//     <p>Chirpy has been visited ${config.fileserverHits} times!</p>
-//   </body>
-// </html>`);
-// });
-
-
-// app.post("/admin/reset", (req: Request, res: Response) => {
-//   config.fileserverHits = 0;
-//   res.set("Content-Type", "text/plain");
-//   res.status(200).send("Hits reset to 0");
-// });
-
-// app.post("/api/validate_chirp",(req:Request,res:Response)=>{
-//   const {body} = req.body
-//   const data:string = body
-//   type errorResponseData = {
-//     error:string
-//   };
-
-//   type successResponseData = {
-//     valid:boolean
-//   }
-
-//   if(data.length>140){
-//     const respBody:errorResponseData = {
-//       error:"Chirp is too long"
-//     }
-
-//     res.header('Content-Type','application/json');
-//     const resBody = JSON.stringify(respBody);
-//     return res.status(400).send(resBody)
-//   } 
-//   const respBody:successResponseData ={
-//     valid:true
-//   }
-
-//   res.header('Content-Type','application/json');
-//   const resBody = JSON.stringify(respBody);
-//   return res.status(200).send(resBody)
-
-// });
-
-// app.listen(port, () => {
-//     console.log(`Server is running on port: ${port}`);
-// });
-
-
-
-// import express, { NextFunction, Request, Response } from "express";
-// import { allowedNodeEnvironmentFlags } from "node:process";
-// import { config } from "./config.js";
-// const app = express();
-// const port = 8080; 
-
-// // 1. First Middleware to log the non success status code
-// function middlewareLogResponses(req:Request,res:Response,next:NextFunction){
-//     res.on("finish",()=>{
-//         if(res.statusCode != 200){
-//             console.log(`[NON-OK] ${req.method} ${req.url} - Status: ${res.statusCode}`);
-//         }
-//     });
-//     next()
-// }
-
-// // 2. The Middleware: Increments hits and passes control to the next handler
-// function middlewareMetricsInc(req: Request, res: Response, next: NextFunction) {
-//   config.fileserverHits++;
-//   next();
-// }
-
-// app.use("/app", middlewareMetricsInc);
-// app.use("/app", express.static("./src/app"));
-// app.use(middlewareLogResponses);
-
-// const handlerReadiness = (req: Request, res: Response) => {
-//     res.set("Content-Type", "text/plain");
-//     res.status(200).send("OK");
-// };
-
-// app.get("/api/healthz", handlerReadiness);
-
-// // Namespace -> admin 
-// app.get("/admin/metrics", (req: Request, res: Response) => {
-//   res.set("Content-Type", "text/html");
-//   res.status(200).send(`<html>
-//   <body>
-//     <h1>Welcome, Chirpy Admin</h1>
-//     <p>Chirpy has been visited ${config.fileserverHits} times!</p>
-//   </body>
-// </html>`);
-// });
-
-// app.post("/admin/reset", (req: Request, res: Response) => {
-//   config.fileserverHits = 0;
-//   res.set("Content-Type", "text/plain");
-//   res.status(200).send("Hits reset to 0");
-// });
-
-// // Using your custom manual body stream-parsing logic here
-// app.post("/api/validate_chirp", (req: Request, res: Response) => {
-//   let body = ""; // 1. Initialize
-
-//   // 2. Listen for data events
-//   req.on("data", (chunk) => {
-//     body += chunk;
-//   });
-
-//   // 3. Listen for end events
-//   req.on("end", () => {
-//     type errorResponseData = {
-//       error: string
-//     };
-
-//     type successResponseData = {
-//       valid: boolean
-//     };
-
-//     try {
-//       const parsedBody = JSON.parse(body);
-//       const data: string = parsedBody.body;
-
-//       // Handle cases where the body is missing altogether or longer than 140 characters
-//       if (!data || data.length > 140) {
-//         const respBody: errorResponseData = {
-//           error: data ? "Chirp is too long" : "Chirp body is required"
-//         };
-
-//         res.header('Content-Type', 'application/json');
-//         return res.status(400).send(JSON.stringify(respBody));
-//       }
-
-//       const respBody: successResponseData = {
-//         valid: true
-//       };
-
-//       res.header('Content-Type', 'application/json');
-//       return res.status(200).send(JSON.stringify(respBody));
-
-//     } catch (error) {
-//       // If JSON parsing fails (e.g. malformed JSON text sent by the client)
-//       const respBody: errorResponseData = {
-//         error: "Invalid JSON"
-//       };
-//       res.header('Content-Type', 'application/json');
-//       return res.status(400).send(JSON.stringify(respBody));
-//     }
-//   });
-// });
-
-// app.listen(port, () => {
-//     console.log(`Server is running on port: ${port}`);
-// });
-
 
 import express, { NextFunction, Request, Response } from "express";
 import { allowedNodeEnvironmentFlags } from "node:process";
 import { config } from "./config.js";
+
+
+// Migration tool imports
+import postgres from "postgres";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { createUser,deleteAllUsers } from "./db/queries/user.js";
+// Run automatic database migrations on startup with a isolated max: 1 client connection
+console.log("Running pending database migrations...");
+const migrationClient = postgres(config.db.url, { max: 1 });
+await migrate(drizzle(migrationClient), config.db.migrationConfig);
+console.log("Database migrations successfully executed!");
+
 const app = express();
 const port = 8080; 
+
 
 
 class BadRequestError extends Error {
@@ -286,10 +91,21 @@ app.get("/admin/metrics", (req: Request, res: Response) => {
 </html>`);
 });
 
-app.post("/admin/reset", (req: Request, res: Response) => {
-  config.fileserverHits = 0;
-  res.set("Content-Type", "text/plain");
-  res.status(200).send("Hits reset to 0");
+app.post("/admin/reset", async (req: Request, res: Response, next:NextFunction) => {
+  // config.fileserverHits = 0;
+  // res.set("Content-Type", "text/plain");
+  // res.status(200).send("Hits reset to 0");
+  try {
+    if(config.platform !== "dev"){
+      throw new ForbiddenError("Access forbidden");
+    }
+    config.fileserverHits = 0;
+    await deleteAllUsers();
+    res.set("Content-type","text/plain");
+    return res.status(200).send("Hits reset to 0 and database cleared")
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Cleaned up handler using express.json()
@@ -337,6 +153,25 @@ app.post("/api/validate_chirp", (req: Request, res: Response) => {
 
   return res.status(200).json(respBody);
 });
+
+
+app.post("/api/users",async (req:Request,res:Response,next:NextFunction)=>{
+  try {
+    const {email} = req.body;
+    if(!email){
+      throw new BadRequestError("Email is required");
+    }
+
+    const newUser = await createUser({email});
+    if(!newUser){
+      throw new BadRequestError("User could not be created or already exists");
+    }
+
+    return res.status(201).json(newUser);
+  } catch (error) {
+    next(error);
+  }
+})
 
 
 // 🚨 Assignment Fix: Error-handling middleware with 4 parameters

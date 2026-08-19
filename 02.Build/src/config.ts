@@ -1,4 +1,5 @@
 import process from "node:process";
+import type { MigrationConfig } from "drizzle-orm/migrator";
 
 // Load the environment variables from the .env file
 process.loadEnvFile();
@@ -12,13 +13,26 @@ function envOrThrow(key: string): string {
   return value;
 }
 
+// Create the new nested configuration types
+export type DBConfig = {
+  url: string;
+  migrationConfig: MigrationConfig;
+};
+
 export type APIConfig = {
   fileserverHits: number;
-  dbURL: string; // Typed as a string
+  platform:string
+  db: DBConfig; // Typed as a string
 };
 
 // Create and export the stateful config object
 export const config: APIConfig = {
   fileserverHits: 0,
-  dbURL: envOrThrow("DB_URL")
+  platform:envOrThrow("PLATFORM"),
+  db: {
+    url: envOrThrow("DB_URL"),
+    migrationConfig:{
+       migrationsFolder: "./src/migrations",
+    }
+  }
 };

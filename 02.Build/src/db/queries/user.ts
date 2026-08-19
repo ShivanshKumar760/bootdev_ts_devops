@@ -9,3 +9,8 @@ export async function createUser(user: NewUser) {
     .returning();
   return result;
 }
+
+// Assignment Query: Truncates or deletes all records from the users table
+export async function deleteAllUsers() {
+  await db.delete(users);
+}
