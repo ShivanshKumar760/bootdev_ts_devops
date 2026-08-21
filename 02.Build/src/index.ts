@@ -9,6 +9,8 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser,deleteAllUsers } from "./db/queries/user.js";
+import { createChirp } from "./db/queries/chirps.js"; // Import your new query
+
 // Run automatic database migrations on startup with a isolated max: 1 client connection
 console.log("Running pending database migrations...");
 const migrationClient = postgres(config.db.url, { max: 1 });
@@ -168,6 +170,41 @@ app.post("/api/users",async (req:Request,res:Response,next:NextFunction)=>{
     }
 
     return res.status(201).json(newUser);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/chirps",async(req:Request,res:Response,next:NextFunction)=>{
+  try {
+    const {body,userId} = req.body;
+    if(!userId){
+      throw new BadRequestError("User id is required");
+    }
+
+    if(!body || body.length>140){
+      throw new BadRequestError("Chirp is too long. Max length is 140");
+    }
+    const profaneWords = ["kerfuffle", "sharbert", "fornax"];
+    const cleanedWords = body.split(" ").map((word:string)=>{
+      if(profaneWords.includes(word.toLowerCase())){
+        return "****"
+      }
+      return word;
+    });
+
+    const cleanedBodyString = cleanedWords.join(" ");
+
+    const newChirp = await createChirp({
+      body: cleanedBodyString,
+      userId: userId
+    });
+
+    if(!newChirp){
+      throw new BadRequestError("Chirp could not be saved to the database");
+    }
+    // Respond with a 201 Created and the camelCase resource structure
+    return res.status(201).json(newChirp);
   } catch (error) {
     next(error);
   }
