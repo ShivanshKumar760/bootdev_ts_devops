@@ -9,7 +9,7 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser,deleteAllUsers } from "./db/queries/user.js";
-import { createChirp } from "./db/queries/chirps.js"; // Import your new query
+import { createChirp,getAllChirps, getChirpById } from "./db/queries/chirps.js"; // Import your new query
 
 // Run automatic database migrations on startup with a isolated max: 1 client connection
 console.log("Running pending database migrations...");
@@ -208,6 +208,16 @@ app.post("/api/chirps",async(req:Request,res:Response,next:NextFunction)=>{
   } catch (error) {
     next(error);
   }
+});
+
+app.get("/api/chirps",async (req:Request,res:Response,next:NextFunction)=>{
+
+  try {
+    const chirpsList = await getAllChirps();
+    return res.status(200).json(chirpsList);
+  } catch (error) {
+    next(error);
+  }
 })
 
 
@@ -244,6 +254,24 @@ function errorHandler(
   });
 }
 
+
+// Assignment Route: GET /api/chirps/:chirpID
+app.get("/api/chirps/:chirpId",async(req:Request,res:Response,next:NextFunction)=>{
+  try {
+    const {chirpId} = req.params;
+    if (typeof chirpId !== "string") {
+      throw new BadRequestError("Invalid chirp ID format");
+    }
+    const chirp = await getChirpById(chirpId);
+    if (!chirp){
+      throw new NotFoundError("Chirp not found");
+    }
+
+    return res.status(200).json(chirp);
+  } catch (error) {
+    next(error);
+  }
+});
 
 
 
