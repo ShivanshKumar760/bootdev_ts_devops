@@ -8,7 +8,7 @@ import { config } from "./config.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { createUser,deleteAllUsers, getUserByEmail } from "./db/queries/user.js";
+import { createUser,deleteAllUsers, getUserByEmail,updateUser} from "./db/queries/user.js";
 import { createChirp,getAllChirps, getChirpById } from "./db/queries/chirps.js"; // Import your new query
 import { saveRefreshToken,getRefreshTokenRecord,revokeRefreshTokenRecord } from "./db/queries/auth.js";
 import { checkPasswordHash, hashPassword,makeJWT,validateJWT,getBearerToken,makeRefreshToken } from "./auth.js";
@@ -188,6 +188,45 @@ app.post("/api/users",async (req:Request,res:Response,next:NextFunction)=>{
     next(error);
   }
 });
+
+// Assignment Route: PUT /api/users
+app.put("/api/users",async(req:Request,res:Response,next:NextFunction)=>{
+  try {
+    const {email,password} = req.body;
+    if (!email || !password) {
+      throw new BadRequestError("Email and password fields are required");
+    }
+    let tokenString:string;
+    try {
+      tokenString=getBearerToken(req);
+    } catch (error) {
+      throw new UnauthorizedError("Missing or malformed authorization header");
+    }
+
+    //validate the signature structure , implicitly enforcing authorization
+    let authenticatedUserId : string;
+    try {
+      authenticatedUserId = validateJWT(tokenString,config.jwtSecret);
+    } catch (error) {
+      throw new UnauthorizedError("Invalid or expired access token");
+    }
+
+    // Hash the newly provided security credentials
+    const newHashedPassword = await hashPassword(password);
+    // Persist the updates safely targeting only the matching sub-token record id
+    const updatedUser=await updateUser(authenticatedUserId,email,newHashedPassword);
+    if (!updatedUser) {
+      throw new NotFoundError("User record not found");
+    }
+
+    // Destructure and strip passwords before returning to the web client
+    const { hashedPassword: _, ...safeUserResponse } = updatedUser;
+
+    return res.status(200).json(safeUserResponse as UserResponse);
+  } catch (error) {
+   next(error); 
+  }
+})
 
 // 🚨 Assignment Route: POST /api/login
 app.post("/api/login", async (req: Request, res: Response, next: NextFunction) => {
