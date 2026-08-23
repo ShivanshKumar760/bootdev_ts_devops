@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { db } from "../index.js";
 import { NewUser, users } from "../schema.js";
 
@@ -13,4 +14,14 @@ export async function createUser(user: NewUser) {
 // Assignment Query: Truncates or deletes all records from the users table
 export async function deleteAllUsers() {
   await db.delete(users);
+}
+
+
+// Assignment Query: Find record by unique email string
+export async function getUserByEmail(email: string) {
+  const [result] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email));
+  return result;
 }

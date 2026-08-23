@@ -8,8 +8,10 @@ import { config } from "./config.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { createUser,deleteAllUsers } from "./db/queries/user.js";
+import { createUser,deleteAllUsers, getUserByEmail } from "./db/queries/user.js";
 import { createChirp,getAllChirps, getChirpById } from "./db/queries/chirps.js"; // Import your new query
+import { checkPasswordHash, hashPassword } from "./auth.js";
+import { User } from "./db/schema.js";
 
 // Run automatic database migrations on startup with a isolated max: 1 client connection
 console.log("Running pending database migrations...");
@@ -157,23 +159,63 @@ app.post("/api/validate_chirp", (req: Request, res: Response) => {
 });
 
 
+// Define safe return payload structure using standard Omit
+type UserResponse = Omit<User, "hashedPassword">;
+
 app.post("/api/users",async (req:Request,res:Response,next:NextFunction)=>{
   try {
-    const {email} = req.body;
+    const {email,password} = req.body;
     if(!email){
       throw new BadRequestError("Email is required");
     }
 
-    const newUser = await createUser({email});
+    if(!password){
+      throw new BadRequestError("Password is required");
+    }
+    const hashedPassword = await hashPassword(password);
+    const newUser = await createUser({email,hashedPassword});
+    // const newUser = await createUser({email}); //old
     if(!newUser){
       throw new BadRequestError("User could not be created or already exists");
     }
 
-    return res.status(201).json(newUser);
+    const { hashedPassword: _, ...safeUserResponse } = newUser;
+
+    return res.status(201).json(safeUserResponse as UserResponse);
   } catch (error) {
     next(error);
   }
 });
+
+// 🚨 Assignment Route: POST /api/login
+app.post("/api/login", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      throw new UnauthorizedError("incorrect email or password");
+    }
+
+    // 1. Resolve user profile records matching the email identifier
+    const userRecord = await getUserByEmail(email);
+    if (!userRecord) {
+      throw new UnauthorizedError("incorrect email or password");
+    }
+
+    // 2. Compute cryptography matching validity
+    const isPasswordValid = await checkPasswordHash(password, userRecord.hashedPassword);
+    if (!isPasswordValid) {
+      throw new UnauthorizedError("incorrect email or password");
+    }
+
+    // Strip out credentials before completing payload returns
+    const { hashedPassword: _, ...safeUserResponse } = userRecord;
+
+    return res.status(200).json(safeUserResponse as UserResponse);
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 app.post("/api/chirps",async(req:Request,res:Response,next:NextFunction)=>{
   try {
