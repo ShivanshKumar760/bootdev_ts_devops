@@ -10,7 +10,8 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser,deleteAllUsers, getUserByEmail } from "./db/queries/user.js";
 import { createChirp,getAllChirps, getChirpById } from "./db/queries/chirps.js"; // Import your new query
-import { checkPasswordHash, hashPassword,makeJWT,validateJWT,getBearerToken } from "./auth.js";
+import { saveRefreshToken,getRefreshTokenRecord,revokeRefreshTokenRecord } from "./db/queries/auth.js";
+import { checkPasswordHash, hashPassword,makeJWT,validateJWT,getBearerToken,makeRefreshToken } from "./auth.js";
 import { User } from "./db/schema.js";
 
 // Run automatic database migrations on startup with a isolated max: 1 client connection
@@ -191,7 +192,7 @@ app.post("/api/users",async (req:Request,res:Response,next:NextFunction)=>{
 // 🚨 Assignment Route: POST /api/login
 app.post("/api/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password,expiresInSeconds } = req.body;
+    const { email, password } = req.body;
     if (!email || !password) {
       throw new UnauthorizedError("incorrect email or password");
     }
@@ -208,23 +209,77 @@ app.post("/api/login", async (req: Request, res: Response, next: NextFunction) =
       throw new UnauthorizedError("incorrect email or password");
     }
 
-    //Default expiration setup : 1 hour (3600 seconds) Max boundary check
+
+    //Default expiration setup : 1 hour (3600 seconds)
     let lifespan = 3600;
-    if(typeof expiresInSeconds === "number" && expiresInSeconds <3600){
-      lifespan = expiresInSeconds;
-    }
 
     //Genrate token payload using custom secret variable
-    const token = makeJWT(userRecord.id,lifespan,config.jwtSecret);
+    const accessToken = makeJWT(userRecord.id,lifespan,config.jwtSecret);
+
+    // Refresh Token expires after exactly 60 days
+    const refreshTokenString = makeRefreshToken();
+    const sixtyDaysFromNow = new Date(Date.now()+60*24*60*60*1000);
+
+    await saveRefreshToken(refreshTokenString,userRecord.id,sixtyDaysFromNow);
 
     // Strip out credentials before completing payload returns
     const { hashedPassword: _, ...safeUserResponse } = userRecord;
 
-    return res.status(200).json({...safeUserResponse,token:token});
+    return res.status(200).json({...safeUserResponse,token:accessToken,refreshToken:refreshTokenString});
   } catch (err) {
     next(err);
   }
 });
+
+
+// 🚨 Assignment Route: POST /api/refresh
+app.post("/api/refresh", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let tokenString: string;
+    try {
+      tokenString = getBearerToken(req);
+    } catch {
+      throw new UnauthorizedError("Missing or malformed authorization header");
+    }
+
+    const dbToken = await getRefreshTokenRecord(tokenString);
+    
+    // Check if token doesn't exist, is expired, or is revoked
+    if (!dbToken || new Date() > dbToken.expiresAt || dbToken.revokedAt !== null) {
+      throw new UnauthorizedError("Invalid, expired, or revoked refresh token");
+    }
+
+    // Generate a fresh 1-hour access token for the subject user
+    const newAccessToken = makeJWT(dbToken.userId, 3600, config.jwtSecret);
+
+    return res.status(200).json({
+      token: newAccessToken
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 🚨 Assignment Route: POST /api/revoke
+app.post("/api/revoke", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let tokenString: string;
+    try {
+      tokenString = getBearerToken(req);
+    } catch {
+      throw new UnauthorizedError("Missing or malformed authorization header");
+    }
+
+    // Flag the record with a current cancellation timestamp
+    await revokeRefreshTokenRecord(tokenString);
+
+    // Return a clean 204 No Content response status
+    return res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 
 app.post("/api/chirps",async(req:Request,res:Response,next:NextFunction)=>{

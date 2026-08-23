@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import argon2 from "argon2";
 import jwt,{ JsonWebTokenError, JwtPayload } from "jsonwebtoken";
 import {Request} from "express";
@@ -54,4 +55,9 @@ export function getBearerToken(req:Request):string {
   }
   //strip prefix and trim whitespace wrapping 
   return authHeader.replace("Bearer ","").trim();
+}
+
+// Assignment Function: Generates a random 256-bit (32-byte) hex string
+export function makeRefreshToken(): string {
+  return crypto.randomBytes(32).toString("hex");
 }
