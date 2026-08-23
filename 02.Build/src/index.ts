@@ -1,6 +1,6 @@
 
 import express, { NextFunction, Request, Response } from "express";
-import { allowedNodeEnvironmentFlags } from "node:process";
+import { allowedNodeEnvironmentFlags, throwDeprecation } from "node:process";
 import { config } from "./config.js";
 
 
@@ -10,11 +10,12 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createUser,deleteAllUsers, getUserByEmail } from "./db/queries/user.js";
 import { createChirp,getAllChirps, getChirpById } from "./db/queries/chirps.js"; // Import your new query
-import { checkPasswordHash, hashPassword } from "./auth.js";
+import { checkPasswordHash, hashPassword,makeJWT,validateJWT,getBearerToken } from "./auth.js";
 import { User } from "./db/schema.js";
 
 // Run automatic database migrations on startup with a isolated max: 1 client connection
 console.log("Running pending database migrations...");
+
 const migrationClient = postgres(config.db.url, { max: 1 });
 await migrate(drizzle(migrationClient), config.db.migrationConfig);
 console.log("Database migrations successfully executed!");
@@ -190,7 +191,7 @@ app.post("/api/users",async (req:Request,res:Response,next:NextFunction)=>{
 // 🚨 Assignment Route: POST /api/login
 app.post("/api/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = req.body;
+    const { email, password,expiresInSeconds } = req.body;
     if (!email || !password) {
       throw new UnauthorizedError("incorrect email or password");
     }
@@ -207,10 +208,19 @@ app.post("/api/login", async (req: Request, res: Response, next: NextFunction) =
       throw new UnauthorizedError("incorrect email or password");
     }
 
+    //Default expiration setup : 1 hour (3600 seconds) Max boundary check
+    let lifespan = 3600;
+    if(typeof expiresInSeconds === "number" && expiresInSeconds <3600){
+      lifespan = expiresInSeconds;
+    }
+
+    //Genrate token payload using custom secret variable
+    const token = makeJWT(userRecord.id,lifespan,config.jwtSecret);
+
     // Strip out credentials before completing payload returns
     const { hashedPassword: _, ...safeUserResponse } = userRecord;
 
-    return res.status(200).json(safeUserResponse as UserResponse);
+    return res.status(200).json({...safeUserResponse,token:token});
   } catch (err) {
     next(err);
   }
@@ -219,11 +229,23 @@ app.post("/api/login", async (req: Request, res: Response, next: NextFunction) =
 
 app.post("/api/chirps",async(req:Request,res:Response,next:NextFunction)=>{
   try {
-    const {body,userId} = req.body;
-    if(!userId){
-      throw new BadRequestError("User id is required");
+    const {body} = req.body;
+    //1. Extract bearer token from Request context,intercepting schema format exceptions
+    let tokenString:string
+    try {
+      tokenString = getBearerToken(req);
+    } catch (error) {
+      throw new UnauthorizedError("Missing or malformed header");
+    }
+    //2. Validate token state signature , throwing 401 if token  is invalid or expired
+    let authenticatedUserId:string;
+    try {
+      authenticatedUserId = validateJWT(tokenString,config.jwtSecret);
+    } catch (error) {
+      throw new UnauthorizedError("Invalid or expired token");
     }
 
+    //3.Complete Character length validation checks
     if(!body || body.length>140){
       throw new BadRequestError("Chirp is too long. Max length is 140");
     }
@@ -239,7 +261,7 @@ app.post("/api/chirps",async(req:Request,res:Response,next:NextFunction)=>{
 
     const newChirp = await createChirp({
       body: cleanedBodyString,
-      userId: userId
+      userId: authenticatedUserId,
     });
 
     if(!newChirp){

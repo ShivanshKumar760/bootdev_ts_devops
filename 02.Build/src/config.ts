@@ -22,6 +22,7 @@ export type DBConfig = {
 export type APIConfig = {
   fileserverHits: number;
   platform:string
+  jwtSecret:string //Add jwtSecret type
   db: DBConfig; // Typed as a string
 };
 
@@ -29,6 +30,7 @@ export type APIConfig = {
 export const config: APIConfig = {
   fileserverHits: 0,
   platform:envOrThrow("PLATFORM"),
+  jwtSecret:envOrThrow("JWT_SECRET"),// Load jwtSecret key
   db: {
     url: envOrThrow("DB_URL"),
     migrationConfig:{
