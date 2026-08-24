@@ -34,3 +34,17 @@ export async function updateUser(id:string,email:string,hashedPassword:string){
 
   return result;
 }
+
+
+// Assignment Query: Upgrades a user to Chirpy Red membership matching their unique ID
+export async function upgradeUserToChirpyRed(id: string) {
+  const [result] = await db
+    .update(users)
+    .set({
+      isChirpyRed: true,
+      updatedAt: new Date()
+    })
+    .where(eq(users.id, id))
+    .returning();
+  return result;
+}

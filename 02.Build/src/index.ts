@@ -8,10 +8,10 @@ import { config } from "./config.js";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { createUser,deleteAllUsers, getUserByEmail,updateUser} from "./db/queries/user.js";
-import { createChirp,getAllChirps, getChirpById } from "./db/queries/chirps.js"; // Import your new query
+import { createUser,deleteAllUsers, getUserByEmail,updateUser, upgradeUserToChirpyRed} from "./db/queries/user.js";
+import { createChirp,deleteChirpById,getAllChirps, getChirpById } from "./db/queries/chirps.js"; // Import your new query
 import { saveRefreshToken,getRefreshTokenRecord,revokeRefreshTokenRecord } from "./db/queries/auth.js";
-import { checkPasswordHash, hashPassword,makeJWT,validateJWT,getBearerToken,makeRefreshToken } from "./auth.js";
+import { checkPasswordHash, hashPassword,makeJWT,validateJWT,getBearerToken,makeRefreshToken, getAPIKey } from "./auth.js";
 import { User } from "./db/schema.js";
 
 // Run automatic database migrations on startup with a isolated max: 1 client connection
@@ -368,14 +368,200 @@ app.post("/api/chirps",async(req:Request,res:Response,next:NextFunction)=>{
   }
 });
 
-app.get("/api/chirps",async (req:Request,res:Response,next:NextFunction)=>{
+// app.get("/api/chirps",async (req:Request,res:Response,next:NextFunction)=>{
 
+//   try {
+//     const chirpsList = await getAllChirps();
+//     return res.status(200).json(chirpsList);
+//   } catch (error) {
+//     next(error);
+//   }
+// })
+
+// 🚨 Assignment Route: POST /api/polka/webhooks (Idempotent Webhook Handler)
+// app.post("/api/polka/webhooks", async (req: Request, res: Response, next: NextFunction) => {
+//   try {
+//     const { event, data } = req.body;
+
+//     // Immediately ignore any events other than user.upgraded with a 204
+//     if (event !== "user.upgraded") {
+//       return res.status(204).send();
+//     }
+
+//     const userId = data?.userId;
+//     if (!userId) {
+//       throw new BadRequestError("Missing userId in payload data");
+//     }
+
+//     // Attempt to upgrade the target user profile
+//     const updatedUser = await upgradeUserToChirpyRed(userId);
+    
+//     // If the user database reference cannot be located, throw 404
+//     if (!updatedUser) {
+//       throw new NotFoundError("User not found");
+//     }
+
+//     // Success response: 204 status with an empty body
+//     return res.status(204).send();
+//   } catch (error) {
+//     next(error);
+//   }
+// });
+
+app.post("/api/polka/webhooks", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const chirpsList = await getAllChirps();
-    return res.status(200).json(chirpsList);
+    // 1. Authentication Layer: Verify and cross-check the Polka API Key
+    let incomingApiKey: string;
+    try {
+      incomingApiKey = getAPIKey(req);
+    } catch {
+      throw new UnauthorizedError("Missing or malformed API Key header");
+    }
+
+    if (incomingApiKey !== config.polkaKey) {
+      throw new UnauthorizedError("Invalid API Key");
+    }
+
+    // 2. Process webhook event content
+    const { event, data } = req.body;
+
+    // Immediately ignore any events other than user.upgraded with a 204
+    if (event !== "user.upgraded") {
+      return res.status(204).send();
+    }
+
+    const userId = data?.userId;
+    if (!userId) {
+      throw new BadRequestError("Missing userId in payload data");
+    }
+
+    // Attempt to upgrade the target user profile
+    const updatedUser = await upgradeUserToChirpyRed(userId);
+    
+    // If the user database reference cannot be located, throw 404
+    if (!updatedUser) {
+      throw new NotFoundError("User not found");
+    }
+
+    // Success response: 204 status with an empty body
+    return res.status(204).send();
   } catch (error) {
     next(error);
   }
+});
+
+
+// app.get("/api/chirps", async (req: Request, res: Response, next: NextFunction) => {
+//   try {
+//     // 1. Extract optional query parameters from url search queries
+//     const { authorId } = req.query;
+
+//     // 2. Enforce strict string verification for the query parameter value if it exists
+//     const authorFilter = typeof authorId === "string" ? authorId : undefined;
+
+//     // 3. Request records, applying the contextual filter parameters seamlessly
+//     const chirpsList = await getAllChirps(authorFilter);
+
+//     // 4. Return the list wrapped inside a standard 200 JSON application block
+//     return res.status(200).json(chirpsList);
+//   } catch (err) {
+//     next(err); // Route unexpected backend processing glitches straight to the errorHandler
+//   }
+// });
+
+
+// Refactored Assignment Route: GET /api/chirps (Supports filtering and sorting query parameters)
+app.get("/api/chirps", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // 1. Extract optional query parameters from url search queries
+    const { authorId, sort } = req.query;
+
+    const authorFilter = typeof authorId === "string" ? authorId : undefined;
+
+    // 2. Fetch the chirps (which are already sorted in ascending order by default from the DB)
+    const chirpsList = await getAllChirps(authorFilter);
+
+    // 3. Keep it simple: Sort the chirps in-memory if "desc" is explicitly passed
+    if (sort === "desc") {
+      chirpsList.sort((a, b) => {
+        // Convert the date strings or objects to timestamps and subtract
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    } else {
+      // Default or "asc": Ensure it's sorted ascending
+      chirpsList.sort((a, b) => {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      });
+    }
+
+    // 4. Return the cleanly sorted list
+    return res.status(200).json(chirpsList);
+  } catch (err) {
+    next(err); 
+  }
+});
+
+
+// Assignment Route: GET /api/chirps/:chirpID
+app.get("/api/chirps/:chirpId",async(req:Request,res:Response,next:NextFunction)=>{
+  try {
+    const {chirpId} = req.params;
+    if (typeof chirpId !== "string") {
+      throw new BadRequestError("Invalid chirp ID format");
+    }
+    const chirp = await getChirpById(chirpId);
+    if (!chirp){
+      throw new NotFoundError("Chirp not found");
+    }
+
+    return res.status(200).json(chirp);
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+app.delete("/api/chirps/:chirpId",async(req:Request,res:Response,next:NextFunction)=>{
+  try {
+    const {chirpId} = req.params;
+
+  if (typeof chirpId !== "string") {
+      throw new BadRequestError("Invalid chirp ID format");
+  }
+
+  // Authentication Layer: Verify the Access Token from headers
+  let tokenString:string
+  try{
+    tokenString = getBearerToken(req);
+  }catch (error) {
+    throw new UnauthorizedError("Missing or malformed header");
+  }
+
+
+  let authenticatedUserId:string
+  try {
+    authenticatedUserId=validateJWT(tokenString,config.jwtSecret);
+  } catch (error) {
+    throw new UnauthorizedError("Invalid or expired token");
+  }
+
+   // Fetch the target Chirp to check existence and ownership parameters
+  const existingChirp = await getChirpById(chirpId);
+  if (!existingChirp) {
+      throw new NotFoundError("Chirp not found");
+  }
+
+  // 3. Authorization Layer: Enforce ownership rules (Block non-authors with a 403)
+  if (existingChirp.userId !== authenticatedUserId) {
+      throw new ForbiddenError("You are not authorized to delete this chirp");
+  }
+
+  await deleteChirpById(chirpId);
+   return res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+  
 })
 
 
@@ -412,24 +598,6 @@ function errorHandler(
   });
 }
 
-
-// Assignment Route: GET /api/chirps/:chirpID
-app.get("/api/chirps/:chirpId",async(req:Request,res:Response,next:NextFunction)=>{
-  try {
-    const {chirpId} = req.params;
-    if (typeof chirpId !== "string") {
-      throw new BadRequestError("Invalid chirp ID format");
-    }
-    const chirp = await getChirpById(chirpId);
-    if (!chirp){
-      throw new NotFoundError("Chirp not found");
-    }
-
-    return res.status(200).json(chirp);
-  } catch (error) {
-    next(error);
-  }
-});
 
 
 

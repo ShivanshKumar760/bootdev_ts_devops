@@ -61,3 +61,20 @@ export function getBearerToken(req:Request):string {
 export function makeRefreshToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
+
+
+// Assignment Function: Extract API Key from custom header format--for web hook polka api key
+export function getAPIKey(req: Request): string {
+  const authHeader = req.get("Authorization");
+  if (!authHeader) {
+    throw new Error("Missing Authorization header");
+  }
+
+  // Ensure it matches the "ApiKey " syntax structure
+  if (!authHeader.startsWith("ApiKey ")) {
+    throw new Error("Invalid authorization header format");
+  }
+
+  // Strip prefix and trim surrounding whitespace
+  return authHeader.replace("ApiKey ", "").trim();
+}

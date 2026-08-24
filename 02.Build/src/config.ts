@@ -24,6 +24,7 @@ export type APIConfig = {
   platform:string
   jwtSecret:string //Add jwtSecret type
   db: DBConfig; // Typed as a string
+  polkaKey: string; // Add polkaKey type
 };
 
 // Create and export the stateful config object
@@ -36,5 +37,6 @@ export const config: APIConfig = {
     migrationConfig:{
        migrationsFolder: "./src/migrations",
     }
-  }
+  },
+  polkaKey: envOrThrow("POLKA_KEY"), // Load polkaKey string
 };
