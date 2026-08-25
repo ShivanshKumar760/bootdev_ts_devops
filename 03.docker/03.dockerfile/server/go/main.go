@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"time"
+	"os"
 )
 
 func main() {
@@ -12,7 +13,7 @@ func main() {
 
 	m.HandleFunc("/", handlePage)
 
-	const port = "8010"
+	port := os.Getenv("PORT")
 	srv := http.Server{
 		Handler:      m,
 		Addr:         ":" + port,
@@ -33,7 +34,7 @@ func handlePage(w http.ResponseWriter, r *http.Request) {
 	const page = `<html>
 <head></head>
 <body>
-	<p> Hello from Docker! I'm a Go server. </p>
+	<p> Hi Docker, I pushed a new version. </p>
 </body>
 </html>
 `
